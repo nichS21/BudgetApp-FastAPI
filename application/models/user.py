@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String
@@ -24,3 +26,12 @@ class User(ModelBase):
 
     def __repr__(self) -> str:
         return f"User(id={self.id}, email={self.email})"
+
+
+# Pydantic dataclasses for endpoint parameters
+@dataclass
+class UserCreate():
+    email: str
+    unhashed_password: str
+    
+    

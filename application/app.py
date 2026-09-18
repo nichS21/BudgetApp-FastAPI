@@ -5,7 +5,7 @@ import sys
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from application.routers import incomes, expenses, contributions, overview
+from application.routers import *
 from application.config import get_settings
 
 # Application environment variables
@@ -31,6 +31,8 @@ logging.basicConfig(force=False,
 app = FastAPI()
 
 # Include the routers mapping to each part of the API
+app.include_router(authentication.authentication_router)
+app.include_router(registration.registration_router)
 app.include_router(incomes.income_router)
 app.include_router(expenses.expense_router)
 app.include_router(contributions.contribution_router)

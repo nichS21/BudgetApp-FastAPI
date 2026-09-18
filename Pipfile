@@ -12,6 +12,8 @@ pytest = "*"
 httpx = "*"
 pytest-asyncio = "*"
 alembic = "*"
+pyjwt = "*"
+pwdlib = {extras = ["argon2"], version = "*"}
 
 [dev-packages]
 

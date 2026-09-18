@@ -8,6 +8,9 @@ Pydantic class to contain the environment variables needed for the project
 class Settings(BaseSettings):
     debug: bool = True
     connection_str: str = ""
+    secret_key: str = ""
+    access_token_expire_minutes: int = 30
+    hashing_algo: str = "HS256"
 
     model_config = SettingsConfigDict(env_file=".env")
 

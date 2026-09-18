@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import ScalarResult, delete, select, update
 
+from application.auth_utilities import AuthDependency
 from application.database import SessionDep
 from application.models.expense import Expense, ExpenseCreate, ExpenseSchema, ExpenseUpdate
 
@@ -21,7 +22,7 @@ expense_router = APIRouter(
     summary="Create an expense",
     description="Create an expense for a specified user"
 )
-async def create_expense(data: ExpenseCreate, session: SessionDep) -> JSONResponse:
+async def create_expense(data: ExpenseCreate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try: 
         expense = Expense(frequency=data.frequency, 
                           name=data.name,
@@ -48,7 +49,7 @@ async def create_expense(data: ExpenseCreate, session: SessionDep) -> JSONRespon
     summary="Get an expense",
     description="Get an expense by its ID"
 )
-async def get_expense(expense_id: int, session: SessionDep) -> JSONResponse:
+async def get_expense(expense_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result: ScalarResult = await session.scalars(select(Expense).where(Expense.id == expense_id))
         result = result.one()
@@ -75,7 +76,7 @@ async def get_expense(expense_id: int, session: SessionDep) -> JSONResponse:
     summary="Update an expense",
     description="Update an expense by its ID"
 )
-async def update_expense(expense_id: int, data: ExpenseUpdate, session: SessionDep) -> JSONResponse:
+async def update_expense(expense_id: int, data: ExpenseUpdate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result = await session.execute(
             update(Expense)
@@ -109,7 +110,7 @@ async def update_expense(expense_id: int, data: ExpenseUpdate, session: SessionD
     summary="Delete an expense",
     description="Delete an expense by its ID"
 )
-async def delete_expense(expense_id: int, session: SessionDep) -> JSONResponse:
+async def delete_expense(expense_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result = await session.execute(
             delete(Expense)
@@ -138,7 +139,7 @@ async def delete_expense(expense_id: int, session: SessionDep) -> JSONResponse:
     summary="List expenses by user",
     description="Get all the expenses tied to the specified user"
 )
-async def list_expenses(user_id: int, session: SessionDep) -> JSONResponse:
+async def list_expenses(user_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result: ScalarResult = await session.scalars(select(Expense)
                                                      .where(Expense.user_id == user_id)

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import ScalarResult, select
 
+from application.auth_utilities import AuthDependency
 from application.database import SessionDep
 from application.models.income import Income, IncomeSchema
 from application.models.expense import Expense, ExpenseSchema
@@ -25,7 +26,7 @@ overview_router = APIRouter(
     summary="Get overview for a user",
     description="Get income, expenses, and contributions with a break down per category, for a user"
 )
-async def get_overview(user_id: int, session: SessionDep) -> JSONResponse:
+async def get_overview(user_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     # Get all data needed for this user's overview
     try:
         result: ScalarResult = await session.scalars(select(Income).where(Income.user_id == user_id))
