@@ -1,17 +1,13 @@
-from typing import Annotated
-
 import pytest_asyncio
 
 from httpx import ASGITransport, AsyncClient
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from application.app import app
 from application.database import get_session
 from application.config import get_settings
 from application.models import *          # Import models so Base.metadata gets filled with Table data for each model
-
 
 
 # App settings from environment variables

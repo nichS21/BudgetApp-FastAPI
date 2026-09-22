@@ -1,29 +1,35 @@
 import pytest
 
+from httpx import AsyncClient
+
 from math import isclose
 
 from fastapi import status
 
 from sqlalchemy import ScalarResult, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.models.contribution import Contribution, ContributionType
 from application.models.user import User
 from application.testing.fixtures.infrastructure_fixtures import test_api, session
 from application.testing.fixtures.model_fixtures import user, contribution, contribution_two
+from application.testing.fixtures.auth_utilities import register_test_user
 
 
 @pytest.mark.asyncio
-async def test_create_contribution_successful(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_create_contribution_successful(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     contribution.user_id = user_id 
     
     response = await test_api.post(
         "/contribution/",
+        headers={
+            "Authorization": auth_header
+        },
         json={
             "frequency": contribution.frequency,
             "name": contribution.name,
@@ -31,7 +37,7 @@ async def test_create_contribution_successful(user: User, contribution: Contribu
             "amount": contribution.amount,
             "user_id": contribution.user_id,
             "type": contribution.type.value
-        }
+        },
     )
 
     assert response.status_code == status.HTTP_201_CREATED
@@ -50,18 +56,20 @@ async def test_create_contribution_successful(user: User, contribution: Contribu
 
 
 @pytest.mark.asyncio
-async def test_create_contribution_extra_fields(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_create_contribution_extra_fields(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     contribution.user_id = user_id 
     
     # Give extra fields in request body. Note that FastAPI ignores these fields since they don't map to the dataclass object at that route
     response = await test_api.post(
         "/contribution/",
+        headers={
+                "Authorization": auth_header
+        },
         json={
             "frequency": contribution.frequency,
             "name": contribution.name,
@@ -90,18 +98,20 @@ async def test_create_contribution_extra_fields(user: User, contribution: Contri
 
 
 @pytest.mark.asyncio
-async def test_create_contribution_bad_payload(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
-
+async def test_create_contribution_bad_payload(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
+    
     contribution.user_id = user_id 
     
     # Request with missing required fields
     response = await test_api.post(
         "/contribution/",
+        headers={
+            "Authorization": auth_header
+        },
         json={
             "frequency": contribution.frequency,
             "name": contribution.name,
@@ -117,6 +127,9 @@ async def test_create_contribution_bad_payload(user: User, contribution: Contrib
     # Request with wrong data types
     response = await test_api.post(
         "/contribution/",
+        headers={
+            "Authorization": auth_header
+        },
         json={
             "frequency": "1/3",
             "name": 27,
@@ -136,11 +149,18 @@ async def test_create_contribution_bad_payload(user: User, contribution: Contrib
 
 
 @pytest.mark.asyncio
-async def test_create_contribution_no_user(contribution: Contribution, test_api, session) -> None:
+async def test_create_contribution_no_user(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+
     # Request has what could have been a valid user ID, but there is no such user in the database, per this test's scope
     user_id: int = 999
     response = await test_api.post(
         "/contribution/",
+        headers={
+            "Authorization": auth_header
+        },
         json={
             "frequency": contribution.frequency,
             "name": contribution.name,
@@ -160,12 +180,37 @@ async def test_create_contribution_no_user(contribution: Contribution, test_api,
 
 
 @pytest.mark.asyncio
-async def test_get_contribution_successful(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_create_contribution_no_auth(contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    user_id: int = 999
+    response = await test_api.post(
+        "/contribution/",
+        headers={
+            "Authorization": "Bearer bad-token"
+        },
+        json={
+            "frequency": contribution.frequency,
+            "name": contribution.name,
+            "description": contribution.description,
+            "amount": contribution.amount,
+            "user_id": user_id,
+            "type": contribution.type.value
+        }
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    
+    # Query database to verify contribution was never created
+    result: ScalarResult = await session.scalars(select(func.count()).select_from(Contribution).where(Contribution.user_id == user_id))
+    contribution_count: int = result.one()
+    assert contribution_count == 0
+
+
+@pytest.mark.asyncio
+async def test_get_contribution_successful(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     contribution.user_id = user_id 
     session.add(contribution)
@@ -174,7 +219,10 @@ async def test_get_contribution_successful(user: User, contribution: Contributio
     contribution_id: int = contribution.id
 
     response = await test_api.get(
-        f"/contribution/{contribution_id}"
+        f"/contribution/{contribution_id}",
+        headers={
+            "Authorization": auth_header
+        },
     )
 
     response_json = response.json()
@@ -190,12 +238,11 @@ async def test_get_contribution_successful(user: User, contribution: Contributio
 
 
 @pytest.mark.asyncio
-async def test_get_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_get_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     contribution.user_id = user_id 
     session.add(contribution)
@@ -203,19 +250,21 @@ async def test_get_contribution_invalid_primary_key(user: User, contribution: Co
     await session.refresh(contribution)
 
     response = await test_api.get(
-        "/contribution/not-a-pk"
+        "/contribution/not-a-pk",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 @pytest.mark.asyncio
-async def test_get_contribution_no_user(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_get_contribution_no_contribution(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     contribution.user_id = user_id 
     session.add(contribution)
@@ -224,20 +273,45 @@ async def test_get_contribution_no_user(user: User, contribution: Contribution, 
     contribution_id: int = contribution.id
 
     response = await test_api.get(
-        f"/contribution/{contribution_id*2}"
+        f"/contribution/{contribution_id*2}",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
 
 @pytest.mark.asyncio
-async def test_patch_contribution_successful(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
+async def test_get_contribution_no_auth(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    user_id: int = registration_results["user_id"]
+    
+    contribution.user_id = user_id 
+    session.add(contribution)
     await session.commit()
-    await session.refresh(user)
+    await session.refresh(contribution)
+    contribution_id: int = contribution.id
 
-    contribution.user_id = user.id 
+    response = await test_api.get(
+        f"/contribution/{contribution_id}",
+        headers={
+            "Authorization": "Bearer no-auth"
+        }
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_patch_contribution_successful(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
+
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
@@ -251,6 +325,9 @@ async def test_patch_contribution_successful(user: User, contribution: Contribut
 
     response = await test_api.patch(
         f"/contribution/{contribution_id}",
+        headers={
+            "Authorization": auth_header
+        },
         json={
           "frequency": updated_frequency,
           "name": updated_name,
@@ -276,13 +353,13 @@ async def test_patch_contribution_successful(user: User, contribution: Contribut
 
 
 @pytest.mark.asyncio
-async def test_patch_contribution_extra_fields(user: User, contribution: Contribution, test_api, session) -> None:
-     # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_patch_contribution_extra_fields(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
@@ -297,6 +374,9 @@ async def test_patch_contribution_extra_fields(user: User, contribution: Contrib
     # Response with extra fields - which should be ignored
     response = await test_api.patch(
         f"/contribution/{contribution_id}",
+        headers={
+            "Authorization": auth_header
+        },
         json={
           "frequency": updated_frequency,
           "name": updated_name,
@@ -324,13 +404,13 @@ async def test_patch_contribution_extra_fields(user: User, contribution: Contrib
 
 
 @pytest.mark.asyncio
-async def test_patch_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_patch_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
@@ -344,6 +424,9 @@ async def test_patch_contribution_invalid_primary_key(user: User, contribution: 
 
     response = await test_api.patch(
         f"/contribution/not-a-primary-key",
+        headers={
+            "Authorization": auth_header
+        },
         json={
           "frequency": updated_frequency,
           "name": updated_name,
@@ -367,13 +450,13 @@ async def test_patch_contribution_invalid_primary_key(user: User, contribution: 
 
 
 @pytest.mark.asyncio
-async def test_patch_contribution_no_contribution(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_patch_contribution_no_contribution(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
@@ -387,6 +470,9 @@ async def test_patch_contribution_no_contribution(user: User, contribution: Cont
 
     response = await test_api.patch(
         f"/contribution/{contribution.id*2}",     # Contribution ID that doesn't exist 
+        headers={
+            "Authorization": auth_header
+        },
         json={
           "frequency": updated_frequency,
           "name": updated_name,
@@ -410,13 +496,13 @@ async def test_patch_contribution_no_contribution(user: User, contribution: Cont
 
 
 @pytest.mark.asyncio
-async def test_patch_contribution_bad_payload(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_patch_contribution_bad_payload(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
@@ -430,6 +516,9 @@ async def test_patch_contribution_bad_payload(user: User, contribution: Contribu
     # Bad payload that is missing fields and giving the wrong types of information for required data. 
     response = await test_api.patch(
         f"/contribution/{contribution.id*2}",     # Contribution ID that doesn't exist 
+        headers={
+            "Authorization": auth_header
+        },
         json={
           "frequency": "Tuesday",
           "description": updated_desc,
@@ -451,20 +540,68 @@ async def test_patch_contribution_bad_payload(user: User, contribution: Contribu
 
 
 @pytest.mark.asyncio
-async def test_delete_contribution_successful(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_patch_contribution_no_auth(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
+    session.add(contribution)
+    await session.commit()
+    await session.refresh(contribution)
+    contribution_id = contribution.id
+
+    updated_frequency: float = 1/3
+    updated_name: str = "HYSA" 
+    updated_desc: str = "High Yield Savings Account"
+    updated_amount: float = 350.57
+    updated_type: str = ContributionType.SAVINGS.value
+
+    response = await test_api.patch(
+        f"/contribution/{contribution.id}",     
+        headers={
+            "Authorization": "Bearer no-auth"
+        },
+        json={
+            "frequency": updated_frequency,
+            "name": updated_name,
+            "description": updated_desc,
+            "amount": updated_amount,
+            "type": updated_type
+        }
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # Verify has not been updated in the database
+    result: ScalarResult = await session.scalars(select(Contribution).where(Contribution.id == contribution_id))
+    updated_contrib: Contribution = result.one()
+
+    assert not isclose(updated_contrib.frequency, updated_frequency)
+    assert updated_contrib.name != updated_name
+    assert updated_contrib.description != updated_desc
+    assert not isclose(updated_contrib.amount, updated_amount)
+    assert updated_contrib.type != ContributionType.SAVINGS
+
+
+@pytest.mark.asyncio
+async def test_delete_contribution_successful(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
+
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
     contribution_id = contribution.id
 
     response = await test_api.delete(
-        f"/contribution/{contribution_id}"    
+        f"/contribution/{contribution_id}",
+        headers={
+            "Authorization": auth_header
+        },  
     )
         
     assert response.status_code == status.HTTP_200_OK
@@ -476,20 +613,23 @@ async def test_delete_contribution_successful(user: User, contribution: Contribu
 
 
 @pytest.mark.asyncio
-async def test_delete_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_delete_contribution_invalid_primary_key(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
     contribution_id = contribution.id
 
     response = await test_api.delete(
-        f"/contribution/not-a-primary-key"    
+        f"/contribution/not-a-primary-key",
+        headers={
+            "Authorization": auth_header
+        }, 
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
@@ -501,20 +641,23 @@ async def test_delete_contribution_invalid_primary_key(user: User, contribution:
 
 
 @pytest.mark.asyncio
-async def test_delete_contribution_no_contribution(user: User, contribution: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
+async def test_delete_contribution_no_contribution(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
-    contribution.user_id = user.id
+    contribution.user_id = user_id
     session.add(contribution)
     await session.commit()
     await session.refresh(contribution)
     contribution_id = contribution.id
 
     response = await test_api.delete(
-        f"/contribution/{contribution_id*2}"      # No contribution exists at this ID   
+        f"/contribution/{contribution_id*2}",      # No contribution exists at this ID
+        headers={
+            "Authorization": auth_header
+        }, 
     )
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -526,12 +669,38 @@ async def test_delete_contribution_no_contribution(user: User, contribution: Con
 
 
 @pytest.mark.asyncio
-async def test_contribution_list_successful(user: User, contribution: Contribution, contribution_two: Contribution, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
+async def test_delete_contribution_no_auth(user: User, contribution: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    user_id: int = registration_results["user_id"]
+
+    contribution.user_id = user_id
+    session.add(contribution)
     await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+    await session.refresh(contribution)
+    contribution_id = contribution.id
+
+    response = await test_api.delete(
+        f"/contribution/{contribution_id}",    
+        headers={
+            "Authorization": "Bearer no-auth"
+        }, 
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    # Verify that the contribution has NOT been deleted
+    result: ScalarResult = await session.scalars(select(func.count()).select_from(Contribution).where(Contribution.id == contribution_id))
+    contribution_count: int = result.one()
+    assert contribution_count == 1
+
+
+@pytest.mark.asyncio
+async def test_contribution_list_successful(user: User, contribution: Contribution, contribution_two: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     # Add contributions to retrieve
     contribution.user_id = user_id
@@ -545,7 +714,10 @@ async def test_contribution_list_successful(user: User, contribution: Contributi
                                                 .order_by(Contribution.id.desc()))
     contributions = result.all()
     response = await test_api.get(
-        f"contribution/contribution-list/{user_id}"
+        f"contribution/contribution-list/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }, 
     )
     
     assert response.status_code == status.HTTP_200_OK
@@ -564,15 +736,17 @@ async def test_contribution_list_successful(user: User, contribution: Contributi
 
 
 @pytest.mark.asyncio
-async def test_contribution_list_successful_no_contributions(user: User, test_api, session) -> None:
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_contribution_list_successful_no_contributions(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     response = await test_api.get(
-        f"contribution/contribution-list/{user_id}"
+        f"contribution/contribution-list/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }, 
     )
 
     # This user has no contributions to list, and that's OK
@@ -582,20 +756,33 @@ async def test_contribution_list_successful_no_contributions(user: User, test_ap
     assert len(contributions) == 0
 
 @pytest.mark.asyncio
-async def test_contribution_list_invalid_primary_key(test_api) -> None:
+async def test_contribution_list_invalid_primary_key(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    
     response = await test_api.get(
-        "contribution/contribution-list/not-a-primary-key"
+        "contribution/contribution-list/not-a-primary-key",
+        headers={
+            "Authorization": auth_header
+        }, 
     )
         
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 @pytest.mark.asyncio
-async def test_contribution_list_no_user(test_api) -> None:
-    # Note that there are no users in the DB when this test is ran
+async def test_contribution_list_no_user(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
     nonexistent_user_id: int = 999
+
     response = await test_api.get(
-        f"contribution/contribution-list/{nonexistent_user_id}"
+        f"contribution/contribution-list/{nonexistent_user_id}",
+        headers={
+            "Authorization": auth_header
+        }, 
     )
 
     # A given user may have zero contributions, so there's nothing to list which is acceptable.
@@ -604,3 +791,20 @@ async def test_contribution_list_no_user(test_api) -> None:
     response_json = response.json()
     assert 'contributions' in response_json
     assert len(response_json['contributions']) == 0
+
+
+@pytest.mark.asyncio
+async def test_contribution_list_no_auth(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
+
+    response = await test_api.get(
+        f"contribution/contribution-list/{user_id}",
+        headers={
+            "Authorization": "Bearer no-auth"
+        }, 
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED

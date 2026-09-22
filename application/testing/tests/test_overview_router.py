@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from httpx import AsyncClient
+
 import pytest
 
 from math import isclose
@@ -7,7 +9,9 @@ from math import isclose
 from fastapi import status
 
 from sqlalchemy import ScalarResult, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from application.testing.fixtures.auth_utilities import register_test_user
 from application.testing.fixtures.model_fixtures import *
 from application.testing.fixtures.infrastructure_fixtures import test_api, session
 from application.models.contribution import Contribution
@@ -18,12 +22,11 @@ from application.models.user import User
 @pytest.mark.asyncio
 async def test_overview_successful(user: User, expense: Expense, expense_two: Expense, 
                                    contribution: Contribution, contribution_two: Contribution, 
-                                   income: Income, test_api, session) -> None:
+                                   income: Income, test_api: AsyncClient, session: AsyncSession) -> None:
     # Commit the user, their income, expenses, and contributions to the database
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     income.user_id = user_id
     expense.user_id = user_id
@@ -34,7 +37,10 @@ async def test_overview_successful(user: User, expense: Expense, expense_two: Ex
     await session.commit()
 
     response = await test_api.get(
-        f"/overview/{user_id}"
+        f"/overview/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -90,23 +96,33 @@ async def test_overview_successful(user: User, expense: Expense, expense_two: Ex
 
 
 @pytest.mark.asyncio
-async def test_overview_invalid_primary_key(test_api, session) -> None:
+async def test_overview_invalid_primary_key(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+
     response = await test_api.get(
-        "/overview/not-a-pk"
+        "/overview/not-a-pk",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 @pytest.mark.asyncio
-async def test_overview_no_user(user: User, test_api, session) -> None:
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+async def test_overview_no_user(user: User, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Register user for an ID and an auth token.
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     response = await test_api.get(
-        f"/overview/{user_id*2}"        # User that doesn't exist in the database, only the first user does
+        f"/overview/{user_id*2}",        # User that doesn't exist in the database, only the first user does
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -114,12 +130,11 @@ async def test_overview_no_user(user: User, test_api, session) -> None:
 
 @pytest.mark.asyncio
 async def test_overview_no_expenses(user: User, income: Income, contribution: Contribution, 
-                                    contribution_two: Contribution, test_api, session) -> None:
+                                    contribution_two: Contribution, test_api: AsyncClient, session: AsyncSession) -> None:
     # Commit needed objects to DB
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     income.user_id = user_id
     contribution.user_id = user_id
@@ -128,7 +143,10 @@ async def test_overview_no_expenses(user: User, income: Income, contribution: Co
     await session.commit()
 
     response = await test_api.get(
-        f"/overview/{user_id}"
+        f"/overview/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -174,12 +192,11 @@ async def test_overview_no_expenses(user: User, income: Income, contribution: Co
 
 @pytest.mark.asyncio
 async def test_overview_no_contributions(user: User, income: Income, expense: Expense,
-                                         expense_two: Expense, test_api, session) -> None:
+                                         expense_two: Expense, test_api: AsyncClient, session: AsyncSession) -> None:
     # Commit needed objects to DB
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     income.user_id = user_id
     expense.user_id = user_id
@@ -188,7 +205,10 @@ async def test_overview_no_contributions(user: User, income: Income, expense: Ex
     await session.commit()
 
     response = await test_api.get(
-        f"/overview/{user_id}"
+        f"/overview/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -233,19 +253,21 @@ async def test_overview_no_contributions(user: User, income: Income, expense: Ex
     
 
 @pytest.mark.asyncio
-async def test_overview_no_expenses_or_contributions(user: User, income: Income, test_api, session) -> None:
+async def test_overview_no_expenses_or_contributions(user: User, income: Income, test_api: AsyncClient, session: AsyncSession) -> None:
     # Commit needed objects to DB
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
+    registration_results: dict = await register_test_user(user, test_api, session)
+    auth_header: str = f"Bearer {registration_results["access_token"]}"
+    user_id: int = registration_results["user_id"]
 
     income.user_id = user_id
     session.add(income)
     await session.commit()
 
     response = await test_api.get(
-        f"/overview/{user_id}"
+        f"/overview/{user_id}",
+        headers={
+            "Authorization": auth_header
+        }
     )
 
     assert response.status_code == status.HTTP_200_OK
@@ -274,4 +296,23 @@ async def test_overview_no_expenses_or_contributions(user: User, income: Income,
     assert len(response_json['expenses']) == 0
     assert 'expenses_monthly_total' in response_json
     assert response_json['expenses_monthly_total'] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_overview_no_auth(user: User, income: income, test_api: AsyncClient, session: AsyncSession) -> None:
+    # Commit needed objects to DB
+    registration_results: dict = await register_test_user(user, test_api, session)
+    user_id: int = registration_results["user_id"]
+
+    income.user_id = user_id
+    session.add(income)
+    await session.commit()
     
+    response = await test_api.get(
+        f"/overview/{user_id}",
+        headers={
+            "Authorization": "Bearer no-auth"
+        }
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED

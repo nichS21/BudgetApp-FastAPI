@@ -55,7 +55,7 @@ async def sign_up(data: UserCreate, session: SessionDep) -> JSONResponse:
                     }
             
         logger.debug("Successfully authenticated user.")
-        return JSONResponse(content=content, status_code=status.HTTP_200_OK)
+        return JSONResponse(content=content, status_code=status.HTTP_201_CREATED)
     except Exception as e:
         logger.error(f"Failed to register user with email: {data.email} \n[Exception] {e}")
         content = {"message": "Failed to register new user"}
