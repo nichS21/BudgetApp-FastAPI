@@ -19,6 +19,7 @@ class User(ModelBase):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(50))
     hashed_password: Mapped[str] = mapped_column(String(255))
+    hashed_recovery_code: Mapped[str] = mapped_column(String(255))
 
     # Map foreign key relationships so are accessible from user object
     income: Mapped["Income"] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -33,5 +34,15 @@ class User(ModelBase):
 class UserCreate():
     email: str
     unhashed_password: str
-    
+
+@dataclass
+class PasswordReset():
+    old_password: str
+    new_password: str
+
+@dataclass
+class ForgotPassword():
+    email: str
+    recovery_code: str
+    new_password: str
     

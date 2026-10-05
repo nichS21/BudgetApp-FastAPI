@@ -6,8 +6,8 @@ from fastapi.params import Depends
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-
 from sqlalchemy import ScalarResult, select
+from sqlalchemy.exc import NoResultFound, MultipleResultsFound
 
 from application.auth_utilities import check_password, create_access_token
 from application.config import get_settings
@@ -52,10 +52,32 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], sess
         
         logger.debug("Successfully authenticated user.")
         return JSONResponse(content=content, status_code=status.HTTP_200_OK)
+    except NoResultFound as e:
+        logger.warning(f"Unable to find user with email '{form_data.username}.' \n[Exception] {e}")
+        return JSONResponse(
+            content={
+                "message": "No user found with given email."
+            },
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except MultipleResultsFound as e:
+        # This should not be able to happen; email addresses are enforced to be unique at registration
+        logger.error(f"Multiple user found with email '{form_data.username}.' \n[Exception] {e}")
+        return JSONResponse(
+            content={
+                "message": "Multiple user accounts associated with this email"
+            },
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
     except Exception as e:
         logger.error(f"Incorrect password or username. \n[Exception] {e}")
         content = {"message": "Incorrect password or username; unable to log in."}
         headers={"WWW-Authenticate": "Bearer"}                          # This is an OAuth standard to return this header upon 401 to give what was expected to auth succcessfully
         return JSONResponse(content=content, status_code=status.HTTP_400_BAD_REQUEST, headers=headers)
 
+
+# Note: JWT is stateless, so there isn't really anything the API can handle for a LOGOUT of a user. (Cannot invalidate a JWT token - just has a set expiration)
+#   This is more so up to the frontend to remove the JWT token from its local storage and redirect the user to a login page. 
+#   There is no sensitive data stored in this application, so I did not feel the need to implement a more secure system via
+#   token blacklist or some other security scheme altogether.
 
