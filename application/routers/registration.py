@@ -70,6 +70,9 @@ async def sign_up(data: UserCreate, session: SessionDep) -> JSONResponse:
 @registration_router.post("/reset-password")
 async def reset_password(data: PasswordReset, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
+        # 'user' object gets wiped from the scope after 'session.commit()' is ran
+        user_id: int = user.id
+
         password_match: bool = check_password(data.old_password, user.hashed_password, user)
         if not password_match:
             logger.debug(f"Invalid password for user: {user.email}")
@@ -93,13 +96,13 @@ async def reset_password(data: PasswordReset, session: SessionDep, user: AuthDep
         if result.rowcount != 1:
             raise Exception("No users were found with this ID, so no password was reset.")
 
-        logger.debug(f"Successfully reset password for user with ID: {user.id}")
+        logger.debug(f"Successfully reset password for user with ID: {user_id}")
 
         # Create new access token for frontend to replace old one with
         access_token_expires: timedelta = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token: str  = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
+        access_token: str  = create_access_token(data={"sub": str(user_id)}, expires_delta=access_token_expires)
 
-        logger.debug(f"Successfully created a new access token for user {user.id} after a password reset.")
+        logger.debug(f"Successfully created a new access token for user {user_id} after a password reset.")
 
         return JSONResponse(
             content={
@@ -110,7 +113,7 @@ async def reset_password(data: PasswordReset, session: SessionDep, user: AuthDep
             status_code=status.HTTP_200_OK
         )
     except Exception as e:
-        logger.error(f"Failed to reset password for user with ID: {user.id} \n[Exception] {e}")
+        logger.error(f"Failed to reset password for user with ID: {user_id} \n[Exception] {e}")
         return JSONResponse(
             content={
                 "message": "Failed to reset password for this user"
@@ -124,10 +127,13 @@ async def forgot_password(data: ForgotPassword, session: SessionDep) -> JSONResp
     try:
         result = await session.scalars(select(User).where(User.email == data.email))
         user: User = result.one()
+        
+        # 'user' object gets wiped from the scope after 'session.commit()' is ran
+        user_id: int = user.id
 
         valid_recovery_code: bool = check_password(data.recovery_code, user.hashed_recovery_code, user)
         if not valid_recovery_code:
-            logger.debug(f"Invalid recovery code for user with ID: {user.id}. Cannot reset password")
+            logger.debug(f"Invalid recovery code for user with ID: {user_id}. Cannot reset password")
             return JSONResponse(
                 content={
                     "message": "Incorrect recovery code."
@@ -139,7 +145,7 @@ async def forgot_password(data: ForgotPassword, session: SessionDep) -> JSONResp
         
         result = await session.execute(
             update(User)
-            .where(User.id == user.id)
+            .where(User.id == user_id)
             .values(hashed_password=new_password)
         )
         await session.commit()
@@ -148,13 +154,13 @@ async def forgot_password(data: ForgotPassword, session: SessionDep) -> JSONResp
         if result.rowcount != 1:
             raise Exception("No users were found with this ID, so no password was reset.")
 
-        logger.debug(f"Successfully reset password for user with ID: {user.id}")
+        logger.debug(f"Successfully reset password for user with ID: {user_id}")
 
         # Create new access token for frontend to replace old one with
         access_token_expires: timedelta = timedelta(minutes=settings.access_token_expire_minutes)
-        access_token: str  = create_access_token(data={"sub": str(user.id)}, expires_delta=access_token_expires)
+        access_token: str  = create_access_token(data={"sub": str(user_id)}, expires_delta=access_token_expires)
 
-        logger.debug(f"Successfully created a new access token for user {user.id} after a password reset.")
+        logger.debug(f"Successfully created a new access token for user {user_id} after a password reset.")
 
         return JSONResponse(
             content={

@@ -13,7 +13,7 @@ from application.models.expense import Expense
 from application.models.user import User
 from application.testing.fixtures.infrastructure_fixtures import test_api, session
 from application.testing.fixtures.model_fixtures import user, expense, expense_two
-from application.testing.fixtures.auth_utilities import register_test_user
+from application.testing.fixtures.testing_auth_utilities import register_test_user
 
 
 @pytest.mark.asyncio
@@ -825,12 +825,6 @@ async def test_expense_list_no_expenses(user: User, test_api: AsyncClient, sessi
     registration_results: dict = await register_test_user(user, test_api, session)
     auth_header: str = f"Bearer {registration_results["access_token"]}"
     user_id: int = registration_results["user_id"]
-
-    # Add user to DB and get its assigned ID
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    user_id: int = user.id
 
     response = await test_api.get(
         f"/expense/expense-list/{user_id}",

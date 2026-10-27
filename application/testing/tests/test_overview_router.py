@@ -11,7 +11,7 @@ from fastapi import status
 from sqlalchemy import ScalarResult, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from application.testing.fixtures.auth_utilities import register_test_user
+from application.testing.fixtures.testing_auth_utilities import register_test_user
 from application.testing.fixtures.model_fixtures import *
 from application.testing.fixtures.infrastructure_fixtures import test_api, session
 from application.models.contribution import Contribution

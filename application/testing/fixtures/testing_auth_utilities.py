@@ -26,5 +26,5 @@ async def register_test_user(user: User, test_api: AsyncClient, session: AsyncSe
     result: ScalarResult = await session.scalars(select(User).where(User.email == user.email))
     db_user: User = result.one()
 
-    return {"user_id" : db_user.id, "access_token": response_json["access_token"]}
+    return {"user_id" : db_user.id, "access_token": response_json["access_token"], "recovery_code": response_json["recovery_code"]}
 

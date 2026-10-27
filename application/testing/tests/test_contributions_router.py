@@ -13,7 +13,7 @@ from application.models.contribution import Contribution, ContributionType
 from application.models.user import User
 from application.testing.fixtures.infrastructure_fixtures import test_api, session
 from application.testing.fixtures.model_fixtures import user, contribution, contribution_two
-from application.testing.fixtures.auth_utilities import register_test_user
+from application.testing.fixtures.testing_auth_utilities import register_test_user
 
 
 @pytest.mark.asyncio
