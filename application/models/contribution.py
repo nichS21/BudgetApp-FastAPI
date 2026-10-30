@@ -1,4 +1,5 @@
 import enum
+
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Float, ForeignKey, NUMERIC, String, BOOLEAN

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import ScalarResult, select, update
 
+from application.auth_utilities import AuthDependency
 from application.database import SessionDep
 from application.models.income import Income, IncomeCreate, IncomeSchema, IncomeUpdate
 
@@ -23,7 +24,7 @@ income_router = APIRouter(
         summary="Create annual salary, and income tax rate",
         description="Create an annual salary with estimated income tax for this user."
         )
-async def create_income_and_tax(data: IncomeCreate, session: SessionDep) -> JSONResponse:
+async def create_income_and_tax(data: IncomeCreate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         user_income = Income(annual_salary=data.annual_salary, 
                              income_tax=data.income_tax,
@@ -46,7 +47,7 @@ async def create_income_and_tax(data: IncomeCreate, session: SessionDep) -> JSON
         summary="Retrive annual salary and income tax rate",
         description="Retrieve the annual salary and income tax rate for this user"
         )
-async def get_income_and_tax(user_id: int, session: SessionDep):
+async def get_income_and_tax(user_id: int, session: SessionDep, user: AuthDependency):
     try:
         result: ScalarResult = await session.scalars(select(Income).where(Income.user_id == user_id))
         result = result.one()
@@ -72,7 +73,7 @@ async def get_income_and_tax(user_id: int, session: SessionDep):
         summary="Update annual salary and income tax rate",
         description="Update the annual salary and income tax rate for this user."
         )
-async def update_income_and_tax(user_id: int, data: IncomeUpdate, session: SessionDep) -> JSONResponse:
+async def update_income_and_tax(user_id: int, data: IncomeUpdate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result = await session.execute(
            update(Income) 

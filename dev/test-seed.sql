@@ -1,7 +1,7 @@
 -- Note: Use for fresh DB only
 -- User
-INSERT INTO "user" (id, email, hashed_password)
-VALUES (1, 'email@gmail.com', 'not_a_hash');
+INSERT INTO "user" (id, email, hashed_password, hashed_recovery_code)
+VALUES (1, 'email@gmail.com', 'not_a_hash', 'recovery_code_1234');
 
 
 -- Income

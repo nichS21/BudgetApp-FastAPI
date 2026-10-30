@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from sqlalchemy import ScalarResult, delete, select, update
 
+from application.auth_utilities import AuthDependency
 from application.database import SessionDep
 from application.models.contribution import Contribution, ContributionCreate, ContributionUpdate, ContributionSchema
 
@@ -21,7 +22,7 @@ contribution_router = APIRouter(
     summary="Create a contribution",
     description="Create a contribution for a specified user"
 )
-async def create_contribution(data: ContributionCreate, session: SessionDep) -> JSONResponse:
+async def create_contribution(data: ContributionCreate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         contribution = Contribution(frequency=data.frequency,
                                     name=data.name,
@@ -49,7 +50,7 @@ async def create_contribution(data: ContributionCreate, session: SessionDep) -> 
     summary="Get a contribution",
     description="Get a contribution by its ID"
 )
-async def get_contribution(contribution_id: int, session: SessionDep) -> JSONResponse:
+async def get_contribution(contribution_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result: ScalarResult = await session.scalars(select(Contribution).where(Contribution.id == contribution_id))
         result = result.one()
@@ -76,7 +77,7 @@ async def get_contribution(contribution_id: int, session: SessionDep) -> JSONRes
     summary="Update a contribution",
     description="Update a contribution by its ID"
 )
-async def update_contribution(contribution_id: int, data: ContributionUpdate, session: SessionDep) -> JSONResponse:
+async def update_contribution(contribution_id: int, data: ContributionUpdate, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result = await session.execute(
             update(Contribution)
@@ -110,7 +111,7 @@ async def update_contribution(contribution_id: int, data: ContributionUpdate, se
     summary="Delete a contribution",
     description="Delete a contribution by its ID"
 )
-async def delete_contribution(contribution_id: int, session: SessionDep) -> JSONResponse:
+async def delete_contribution(contribution_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result = await session.execute(
             delete(Contribution)
@@ -139,7 +140,7 @@ async def delete_contribution(contribution_id: int, session: SessionDep) -> JSON
     summary="List all contributions by user",
     description="Get all contributions tied to the specified user"
 )
-async def list_contributions(user_id: int, session: SessionDep) -> JSONResponse:
+async def list_contributions(user_id: int, session: SessionDep, user: AuthDependency) -> JSONResponse:
     try:
         result: ScalarResult = await session.scalars(select(Contribution)
                                                     .where(Contribution.user_id == user_id)

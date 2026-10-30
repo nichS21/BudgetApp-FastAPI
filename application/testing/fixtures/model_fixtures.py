@@ -18,7 +18,7 @@ in the tests they are required in.
 def user() -> User:
     return User(
         email="test@email.com",
-        hashed_password="hashed"
+        hashed_password="Password!"     # This awful password doesn't actually get hashed until it is passed into the regitration utility used by the test suites
     )
 
 
