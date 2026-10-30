@@ -27,8 +27,18 @@ logging.basicConfig(force=False,
                         logging.StreamHandler(sys.stderr)               # Log to standard error output (console) so can easily be piped to a file for production
                     ],)             
 
+# Configure docs URLs
+#   Don't want to show them in non development environments
+openapi_url: str = "/openapi.json" if settings.debug else ""
+docs_url: str = "/docs" if settings.debug else ""
+redoc_url: str = "/redoc" if settings.debug else ""
+
 # Intialize Web API
-app = FastAPI()
+app = FastAPI(
+      openapi_url=openapi_url,
+      docs_url=docs_url,
+      redoc_url=redoc_url
+)
 
 # Include the routers mapping to each part of the API
 app.include_router(authentication.authentication_router)
